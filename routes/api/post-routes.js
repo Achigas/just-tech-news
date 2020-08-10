@@ -1,5 +1,6 @@
 const router = require('express').Router();
 const { Post, User } = require('../../models');
+const sequelize = require('../../config/connection');
 
 // get all users
 router.get('/', (req, res) => {
@@ -20,13 +21,18 @@ router.get('/', (req, res) => {
       });
   });
 
-  //get one single post
   router.get('/:id', (req, res) => {
     Post.findOne({
       where: {
         id: req.params.id
       },
-      attributes: ['id', 'post_url', 'title', 'created_at'],
+      attributes: [
+        'id',
+        'post_url',
+        'title',
+        'created_at',
+        [sequelize.literal('(SELECT COUNT(*) FROM vote WHERE post.id = vote.post_id)'), 'vote_count']
+      ],
       include: [
         {
           model: User,
@@ -61,8 +67,6 @@ router.get('/', (req, res) => {
       });
   })
 
-  ry to build the route and query on your own before reviewing and adding the following code:
-
 router.put('/:id', (req, res) => {
   Post.update(
     {
@@ -87,24 +91,36 @@ router.put('/:id', (req, res) => {
     });
 });
 
-router.delete('/:id', (req, res) => {
-  Post.destroy({
+// PUT /api/posts/upvote
+router.put('/upvote', (req, res) => {
+// create the vote
+Vote.create({
+  user_id: req.body.user_id,
+  post_id: req.body.post_id
+}).then(() => {
+  // then find the post we just voted on
+  return Post.findOne({
     where: {
-      id: req.params.id
-    }
+      id: req.body.post_id
+    },
+    attributes: [
+      'id',
+      'post_url',
+      'title',
+      'created_at',
+      // use raw MySQL aggregate function query to get a count of how many votes the post has and return it under the name `vote_count`
+      [
+        sequelize.literal('(SELECT COUNT(*) FROM vote WHERE post.id = vote.post_id)'),
+        'vote_count'
+      ]
+    ]
   })
-    .then(dbPostData => {
-      if (!dbPostData) {
-        res.status(404).json({ message: 'No post found with this id' });
-        return;
-      }
-      res.json(dbPostData);
-    })
-    .catch(err => {
-      console.log(err);
-      res.status(500).json(err);
-    });
-});
-
+  .then(dbPostData => res.json(dbPostData))
+  .catch(err => {
+    console.log(err);
+    res.status(400).json(err);
+  })
+})
+})
 
   module.exports = router;
